@@ -18,5 +18,10 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
-      - run: npm audit --audit-level=high
+      # Audit gate: fail on HIGH/CRITICAL only. Moderate dev-only advisories
+      # (vitest/vite/esbuild dev-server scope, drizzle-kit esbuild-kit chain)
+      # are tracked, not build-blocking. Review weekly via `npm audit`.
+      - run: npm audit --audit-level=high --omit=dev
+      - run: npm audit --json > /tmp/audit.json || true
+      - run: python3 -c "import json;d=json.load(open('/tmp/audit.json'));m=d.get('metadata',{}).get('vulnerabilities',{});print('audit summary:',m);assert m.get('high',0)==0 and m.get('critical',0)==0,f"HIGH/CRITICAL vulns found: {m}""
       - run: npm run build
