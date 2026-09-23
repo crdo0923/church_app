@@ -23,5 +23,6 @@ jobs:
       # are tracked, not build-blocking. Review weekly via `npm audit`.
       - run: npm audit --audit-level=high --omit=dev
       - run: npm audit --json > /tmp/audit.json || true
-      - run: python3 -c "import json;d=json.load(open('/tmp/audit.json'));m=d.get('metadata',{}).get('vulnerabilities',{});print('audit summary:',m);assert m.get('high',0)==0 and m.get('critical',0)==0,f"HIGH/CRITICAL vulns found: {m}""
+      - name: Assert zero HIGH/CRITICAL vulns
+        run: python3 scripts/audit-gate.py /tmp/audit.json
       - run: npm run build
