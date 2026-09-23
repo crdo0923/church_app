@@ -26,10 +26,14 @@ Required checks before prod promote: lint, typecheck, unit, build, e2e smoke,
 2. Env (Production + Preview): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
    `SUPABASE_SERVICE_ROLE_KEY` (server-only), `NEXT_PUBLIC_APP_URL=https://roadmapchurch.crdo.site`,
    `SENTRY_DSN` (optional), `GITHUB_TOKEN` (optional, server-only).
-3. `vercel domains add roadmapchurch.crdo.site` → Vercel gives `CNAME cname.vercel-dns.com`.
-4. DNS (third-party registrar for `crdo.site`): add `CNAME roadmapchurch → cname.vercel-dns.com`
-   (same pattern as `events/docs/cine.crdo.site`). Apex stays untouched.
-5. Verify: `vercel domains inspect roadmapchurch.crdo.site` → `dig roadmapchurch.crdo.site` → HTTPS 200.
+3. `vercel domains add roadmapchurch.crdo.site` → Vercel gave project-specific target
+   `CNAME roadmapchurch → 7dd8a2518cf24324.vercel-dns-017.com` (Proxy/DNS-only OFF).
+4. DNS (Cloudflare, zone `crdo.site`): record added 2026-09-23 — Name `roadmapchurch`,
+   Type CNAME, Target `7dd8a2518cf24324.vercel-dns-017.com`, Proxy OFF, TTL Auto.
+   Apex untouched. (Cloudflare MCP has no zone/token scope here, so DNS was added
+   manually in Cloudflare dashboard per the generated `vercel domains verify` output.)
+5. Verified 2026-09-23: `vercel domains verify` → Valid Configuration; `dig` resolves
+   CNAME → 216.198.79.65 / 64.29.17.65; HTTPS 200 on `/`, `/app/overview`, `/app/roadmap`.
 
 Precedent in team: `events.crdo.site` (multiply-talents), `docs.crdo.site`, `cine.crdo.site` —
 same CNAME pattern, `iad1/sfo1` regions, Node 24.x (we pin 22.x matching local).
