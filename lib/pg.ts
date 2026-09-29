@@ -208,6 +208,9 @@ export function getSql() {
       max: 5,
       idle_timeout: 20,
       connect_timeout: 10,
+      // All tracker tables live in the roadmapchurch schema (shared DB).
+      // `postgres` passes unknown options as connection parameters.
+      ...({ search_path: "roadmapchurch, public" } as object),
     });
   }
   return sql;
@@ -221,6 +224,9 @@ export async function ensureSchema(): Promise<boolean> {
   }
   if (schemaReady) return true;
   try {
+    // Dedicated schema isolates tracker tables from other apps sharing the DB.
+    await client.unsafe(`CREATE SCHEMA IF NOT EXISTS roadmapchurch`);
+    await client.unsafe(`SET search_path TO roadmapchurch, public`);
     // Split multi-statement DDL: Neon pooler chokes on multi-command unsafe().
     const statements = DDL.split(/;\s*\n/).map((s) => s.trim()).filter(Boolean);
     for (const stmt of statements) {
