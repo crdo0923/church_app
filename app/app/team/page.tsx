@@ -8,7 +8,8 @@ import { Card } from "@/components/app/Card";
 export default async function TeamPage() {
   const user = await currentUser();
   if (!user) redirect("/login");
-  const users = listUsers().filter((u) => u.status === "ACTIVE");
+  const allUsers = await listUsers();
+  const users = allUsers.filter((u) => u.status === "ACTIVE");
   return (
     <AppShell
       title="Team"

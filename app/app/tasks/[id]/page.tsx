@@ -37,11 +37,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   const { phase, task } = found;
   const milestone = phase.milestones.find((m) => m.id === task.milestoneId);
   const canEdit = user.role === "SUPER_ADMIN" || user.role === "ADMIN" || user.role === "EDITOR";
-  const status = getItemStatus("task", task.id, "BACKLOG");
-  const criteria = listCriteria("task", task.id);
-  const evidence = listEvidence("task", task.id);
-  const completions = listCompletions("task", task.id);
-  const comments = listComments("task", task.id);
+  const status = await getItemStatus("task", task.id, "BACKLOG");
+  const criteria = await listCriteria("task", task.id);
+  const evidence = await listEvidence("task", task.id);
+  const completions = await listCompletions("task", task.id);
+  const comments = await listComments("task", task.id);
 
   const { CriteriaList } = await import("@/components/app/CriteriaList");
   const { EvidenceForm, EvidenceList } = await import("@/components/app/EvidenceBits");

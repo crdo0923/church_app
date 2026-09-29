@@ -1,14 +1,14 @@
 import { requireSuperAdmin } from "@/lib/auth";
 import { listUsers, listAudit } from "@/lib/tracker-store";
-import { dbStatus } from "@/lib/tracker-db";
+import { dbStatus } from "@/lib/pg";
 import { AppShell } from "@/components/app/AppShell";
 import { Badge } from "@/components/app/Badge";
 import { Card, CardHeading } from "@/components/app/Card";
 
 export default async function AdminDashboard() {
   const user = await requireSuperAdmin();
-  const users = listUsers();
-  const audit = listAudit(8, 0);
+  const users = await listUsers();
+  const audit = await listAudit(8, 0);
   const db = dbStatus();
   const count = (fn: (u: (typeof users)[number]) => boolean) => users.filter(fn).length;
   const cards = [
@@ -58,9 +58,9 @@ export default async function AdminDashboard() {
         <Card>
           <CardHeading>Tracker status</CardHeading>
           <p className="mt-2 text-xs">
-            <Badge tone={db.writable ? "success" : "warning"}>{db.writable ? "Database writable" : "Snapshot mode"}</Badge>
+            <Badge tone={db.ready ? "success" : "warning"}>{db.ready ? "Database writable" : "Snapshot mode"}</Badge>
           </p>
-          <p className="mt-2 font-mono text-[11px] text-muted">{db.writable ? db.path : (db.error ?? "Set TRACKER_DB_PATH")}</p>
+          <p className="mt-2 font-mono text-[11px] text-muted">{db.ready ? (db.configured ? "Postgres (DATABASE_URL)" : "not configured") : (db.error ?? "Set TRACKER_DB_PATH")}</p>
           <p className="mt-2 text-xs text-muted">Tracker accounts are independent from the Church Leadership LMS.</p>
         </Card>
       </div>

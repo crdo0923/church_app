@@ -6,7 +6,7 @@ import { ProjectUpdateForm } from "@/components/app/ProjectUpdateForm";
 
 export default async function ProjectUpdatePage() {
   const user = await requireEditor();
-  const state = getProjectState();
+  const state = await getProjectState();
   return (
     <AppShell
       title="Update project"

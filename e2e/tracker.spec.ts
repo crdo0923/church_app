@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("critical tracker scenario (§51)", () => {
-  // Serial, single-project-safe flow. The Playwright webServer owns one SQLite
-  // file; the FIRST test to run creates the Super Admin via the real setup
+  // Serial, single-project-safe flow. The Playwright webServer owns one Postgres
+  // database; the FIRST test to run creates the Super Admin via the real setup
   // form, later runs sign in. Deterministic per-project emails keep chromium +
   // mobile from colliding.
 

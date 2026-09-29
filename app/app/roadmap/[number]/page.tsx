@@ -3,7 +3,9 @@ import { currentUser } from "@/lib/auth";
 import {
   getItemStatus,
   getPhase,
+  getManualProgress,
   listCriteria,
+  listDeliverables,
   listEvidence,
   listCompletions,
   listComments,
@@ -36,18 +38,13 @@ export default async function PhaseDetailPage({ params }: { params: Promise<{ nu
   const phaseId = `phase-${phase.number}`;
   const canEdit = user.role === "SUPER_ADMIN" || user.role === "ADMIN" || user.role === "EDITOR";
 
-  const status = getItemStatus("phase", phaseId, phase.number === "01" ? "IN_PROGRESS" : "PLANNED");
-  const criteria = listCriteria("phase", phaseId);
-  const evidence = listEvidence("phase", phaseId);
-  const completions = listCompletions("phase", phaseId);
-  const comments = listComments("phase", phaseId);
-  const { done, total } = taskDoneCount(phase.number);
-  const db = (await import("@/lib/tracker-db")).getDb();
-  let manual: number | null = null;
-  if (db) {
-    const row = db.prepare("SELECT percent FROM manual_progress WHERE entity_type='phase' AND entity_id=?").get(phaseId) as { percent: number } | undefined;
-    if (row) manual = Number(row.percent);
-  }
+  const status = await getItemStatus("phase", phaseId, phase.number === "01" ? "IN_PROGRESS" : "PLANNED");
+  const criteria = await listCriteria("phase", phaseId);
+  const evidence = await listEvidence("phase", phaseId);
+  const completions = await listCompletions("phase", phaseId);
+  const comments = await listComments("phase", phaseId);
+  const { done, total } = await taskDoneCount(phase.number);
+  let manual = await getManualProgress("phase", phaseId);
   if (manual === null && phase.number === "01") manual = 42;
   const calc = total === 0 ? 0 : Math.round((done / total) * 100);
   const progress = displayProgress({ calculatedPercent: calc, manualPercent: manual });
@@ -169,18 +166,9 @@ export default async function PhaseDetailPage({ params }: { params: Promise<{ nu
   );
 }
 
-import { getDb } from "@/lib/tracker-db";
 import { DeliverableBits } from "@/components/app/DeliverableBits";
 
 async function DeliverableList({ phaseNumber, canEdit }: { phaseNumber: string; canEdit: boolean }) {
-  const db = getDb();
-  const rows = db
-    ? ((db.prepare("SELECT * FROM deliverables WHERE phase_number=? ORDER BY position").all(phaseNumber) as Record<string, unknown>[]).map((r) => ({
-        id: String(r.id),
-        label: String(r.label),
-        owner: String(r.owner ?? ""),
-        status: String(r.status),
-      })))
-    : [];
+  const rows = await listDeliverables(phaseNumber);
   return <DeliverableBits rows={rows} phaseNumber={phaseNumber} canEdit={canEdit} />;
 }

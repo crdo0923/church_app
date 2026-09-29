@@ -11,14 +11,14 @@ import { ArrowRight, OctagonAlert } from "lucide-react";
 export default async function OverviewPage() {
   const user = await currentUser();
   if (!user) redirect("/login");
-  const phases = listPhases();
-  const state = getProjectState();
+  const phases = await listPhases();
+  const state = await getProjectState();
   const current = phases.find((p) => p.number === state.currentPhaseNumber) ?? phases[0];
   const progress = displayProgress({
     calculatedPercent: current?.progress ?? 0,
     manualPercent: current?.progressSource === "MANUAL" ? (current?.progress ?? null) : null,
   });
-  const updates = listProjectUpdates(5);
+  const updates = await listProjectUpdates(5);
   const canEdit = user.role === "SUPER_ADMIN" || user.role === "ADMIN" || user.role === "EDITOR";
 
   return (

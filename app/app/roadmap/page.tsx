@@ -8,7 +8,7 @@ import { Card, CardHeading } from "@/components/app/Card";
 export default async function RoadmapPage() {
   const user = await currentUser();
   if (!user) redirect("/login");
-  const phases = listPhases();
+  const phases = await listPhases();
 
   return (
     <AppShell

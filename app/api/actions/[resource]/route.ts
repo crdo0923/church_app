@@ -13,7 +13,8 @@ import {
   setCriterionStatus,
   setItemStatus,
 } from "@/lib/tracker-store";
-import { getDb, newId, nowIso, hashToken } from "@/lib/tracker-db";
+import { ensureSchema, getSql } from "@/lib/pg";
+import { newId, nowIso, hashToken, hashPassword } from "@/lib/tracker-db";
 import {
   changeRoleSchema,
   changeStatusSchema,
@@ -34,8 +35,11 @@ function deny(message: string, status = 403) {
 
 export async function POST(req: Request, { params }: { params: Promise<{ resource: string }> }) {
   const { resource } = await params;
-  const db = getDb();
-  if (!db) return NextResponse.json({ ok: false, error: "Database unavailable." }, { status: 503 });
+  if (!(await ensureSchema())) {
+    return NextResponse.json({ ok: false, error: "Database unavailable." }, { status: 503 });
+  }
+  const sql = getSql();
+  if (!sql) return NextResponse.json({ ok: false, error: "Database unavailable." }, { status: 503 });
   const me = await currentUser();
   if (!me) return deny("Sign in required.", 401);
   let body: unknown = {};
@@ -49,8 +53,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
   /* ---- seed (editor+) ---- */
   if (resource === "seed") {
     await requireEditor();
-    const result = seedSnapshot();
-    audit(db, { actorId: me.id, actorEmail: me.email, action: "seed.run", entity: "system", entityId: "seed" });
+    const result = await seedSnapshot();
+    await audit({ actorId: me.id, actorEmail: me.email, action: "seed.run", entity: "system", entityId: "seed" });
     return NextResponse.json({ ok: true, ...result });
   }
 
@@ -59,7 +63,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     await requireEditor();
     const parsed = projectUpdateSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ ok: false, error: "Check the update fields and try again." }, { status: 400 });
-    const result = saveProjectUpdate({ ...parsed.data, actorId: me.id, actorEmail: me.email });
+    const result = await saveProjectUpdate({ ...parsed.data, actorId: me.id, actorEmail: me.email });
     if (!result.ok) return NextResponse.json(result, { status: 500 });
     return NextResponse.json({ ok: true });
   }
@@ -79,7 +83,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       );
     }
     const et = entityType as "phase" | "milestone" | "task";
-    const result = setItemStatus(et, entityId, parsed.data.status, actor, parsed.data.note);
+    const result = await setItemStatus(et, entityId, parsed.data.status, actor, parsed.data.note);
     if (!result.ok) return NextResponse.json(result, { status: 500 });
     return NextResponse.json({ ok: true });
   }
@@ -99,7 +103,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     if (!(body as { reopen?: boolean })?.reopen && !parsed.data.approved)
       return NextResponse.json({ ok: false, error: "Review was not approved — item stays in progress." }, { status: 409 });
     const et = entityType as "phase" | "milestone" | "task";
-    const result = recordCompletion(et, entityId, action, parsed.data.completionNotes, parsed.data.overrideReason, actor);
+    const result = await recordCompletion(et, entityId, action, parsed.data.completionNotes, parsed.data.overrideReason, actor);
     if (!result.ok) return NextResponse.json(result, { status: 500 });
     return NextResponse.json({ ok: true, action });
   }
@@ -111,14 +115,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     if (criterionId && status) {
       if (!["COMPLETE", "INCOMPLETE", "NOT_APPLICABLE"].includes(status))
         return NextResponse.json({ ok: false, error: "Invalid criterion status." }, { status: 400 });
-      const result = setCriterionStatus(criterionId, status as "COMPLETE", actor);
+      const result = await setCriterionStatus(criterionId, status as "COMPLETE", actor);
       if (!result.ok) return NextResponse.json(result, { status: 500 });
       return NextResponse.json({ ok: true });
     }
     const parsed = criterionInputSchema.safeParse((body as Record<string, unknown>) ?? {});
     if (!parsed.success || !entityType || !entityId)
       return NextResponse.json({ ok: false, error: "Criterion label and item reference are required." }, { status: 400 });
-    const result = addCriterion({
+    const result = await addCriterion({
       entityType: entityType as "phase" | "milestone" | "task",
       entityId,
       label: parsed.data.label,
@@ -138,7 +142,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     const parsed = evidenceInputSchema.safeParse((body as Record<string, unknown>) ?? {});
     if (!parsed.success || !entityType || !entityId)
       return NextResponse.json({ ok: false, error: "Evidence label and item reference are required." }, { status: 400 });
-    const result = addEvidence({ entityType, entityId, ...parsed.data, actorId: me.id, actorEmail: me.email });
+    const result = await addEvidence({ entityType, entityId, ...parsed.data, actorId: me.id, actorEmail: me.email });
     if (!result.ok) return NextResponse.json(result, { status: 500 });
     return NextResponse.json({ ok: true });
   }
@@ -149,7 +153,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     const parsed = commentInputSchema.safeParse((body as Record<string, unknown>) ?? {});
     if (!parsed.success || !entityType || !entityId)
       return NextResponse.json({ ok: false, error: "Comment text and item reference are required." }, { status: 400 });
-    const result = addComment(entityType, entityId, parsed.data.body, actor);
+    const result = await addComment(entityType, entityId, parsed.data.body, actor);
     if (!result.ok) return NextResponse.json(result, { status: 500 });
     return NextResponse.json({ ok: true });
   }
@@ -162,10 +166,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     if ((entityType !== "phase" && entityType !== "milestone") || typeof entityId !== "string" || !Number.isFinite(pct))
       return NextResponse.json({ ok: false, error: "Item reference and a 0–100 percent are required." }, { status: 400 });
     const clamped = Math.min(100, Math.max(0, Math.round(pct)));
-    db.prepare(
-      "INSERT INTO manual_progress (entity_type, entity_id, percent, updated_by, updated_at) VALUES (?,?,?,?,?) ON CONFLICT(entity_type, entity_id) DO UPDATE SET percent=excluded.percent, updated_by=excluded.updated_by, updated_at=excluded.updated_at",
-    ).run(String(entityType), entityId, clamped, me.id, nowIso());
-    audit(db, { actorId: me.id, actorEmail: me.email, action: "progress.manual", entity: String(entityType), entityId, metadata: { percent: clamped } });
+    await sql`
+      INSERT INTO manual_progress (entity_type, entity_id, percent, updated_by, updated_at)
+      VALUES (${String(entityType)}, ${entityId}, ${clamped}, ${me.id}, ${nowIso()})
+      ON CONFLICT (entity_type, entity_id) DO UPDATE SET percent=EXCLUDED.percent, updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at
+    `;
+    await audit({ actorId: me.id, actorEmail: me.email, action: "progress.manual", entity: String(entityType), entityId, metadata: { percent: clamped } });
     return NextResponse.json({ ok: true, percent: clamped });
   }
 
@@ -177,14 +183,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     if (!parsed.success || !phaseNumber)
       return NextResponse.json({ ok: false, error: "Task title and phase are required." }, { status: 400 });
     const id = newId();
-    db.prepare(
-      "INSERT INTO tasks (id, phase_number, milestone_id, title, summary, description, owner, priority, target_date, dependencies, technical_notes, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-    ).run(
-      id, phaseNumber, milestoneId ?? "", parsed.data.title, parsed.data.summary, parsed.data.description,
-      parsed.data.owner, parsed.data.priority, parsed.data.targetDate, parsed.data.dependencies,
-      parsed.data.technicalNotes, me.id, nowIso(), nowIso(),
-    );
-    audit(db, { actorId: me.id, actorEmail: me.email, action: "task.created", entity: "task", entityId: id, metadata: { title: parsed.data.title, phase: phaseNumber } });
+    await sql`
+      INSERT INTO tasks (id, phase_number, milestone_id, title, summary, description, owner, priority, target_date, dependencies, technical_notes, created_by, created_at, updated_at)
+      VALUES (${id}, ${phaseNumber}, ${milestoneId ?? ""}, ${parsed.data.title}, ${parsed.data.summary}, ${parsed.data.description}, ${parsed.data.owner}, ${parsed.data.priority}, ${parsed.data.targetDate}, ${parsed.data.dependencies}, ${parsed.data.technicalNotes}, ${me.id}, ${nowIso()}, ${nowIso()})
+    `;
+    await audit({ actorId: me.id, actorEmail: me.email, action: "task.created", entity: "task", entityId: id, metadata: { title: parsed.data.title, phase: phaseNumber } });
     return NextResponse.json({ ok: true, id });
   }
 
@@ -201,13 +204,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
         const id = newId();
         const now = nowIso();
         const expires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
-        db.prepare(
-          "INSERT INTO invites (id, email, full_name, role, notes, token_hash, created_by, created_at, expires_at) VALUES (?,?,?,?,?,?,?,?,?)",
-        ).run(id, parsed.data.email.toLowerCase(), parsed.data.fullName, parsed.data.role, parsed.data.notes ?? "", hashToken(token), me.id, now, expires);
-        audit(db, { actorId: me.id, actorEmail: me.email, action: "user.invited", entity: "user", entityId: id, metadata: { email: parsed.data.email.toLowerCase(), role: parsed.data.role } });
+        await sql`
+          INSERT INTO invites (id, email, full_name, role, notes, token_hash, created_by, created_at, expires_at)
+          VALUES (${id}, ${parsed.data.email.toLowerCase()}, ${parsed.data.fullName}, ${parsed.data.role}, ${parsed.data.notes ?? ""}, ${hashToken(token)}, ${me.id}, ${now}, ${expires})
+        `;
+        await audit({ actorId: me.id, actorEmail: me.email, action: "user.invited", entity: "user", entityId: id, metadata: { email: parsed.data.email.toLowerCase(), role: parsed.data.role } });
         return NextResponse.json({ ok: true, inviteToken: token, inviteId: id });
       }
-      const created = createUser({
+      const created = await createUser({
         fullName: parsed.data.fullName,
         email: parsed.data.email,
         role: parsed.data.role as "ADMIN" | "EDITOR" | "VIEWER",
@@ -224,38 +228,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       const parsed = changeRoleSchema.safeParse((body as Record<string, unknown>) ?? {});
       if (!parsed.success) return NextResponse.json({ ok: false, error: "User and role are required." }, { status: 400 });
       if (parsed.data.role === "SUPER_ADMIN") return deny("Super Admin can only be assigned during initial setup.");
-      const target = listUsers().find((u) => u.id === parsed.data.userId);
+      const users = await listUsers();
+      const target = users.find((u) => u.id === parsed.data.userId);
       if (!target) return NextResponse.json({ ok: false, error: "User not found." }, { status: 404 });
       if (target.role === "SUPER_ADMIN") return deny("The Super Admin role cannot be changed here.");
       if (target.id === me.id) return deny("You cannot change your own role.");
-      db.prepare("UPDATE users SET role=?, updated_at=? WHERE id=?").run(parsed.data.role, nowIso(), target.id);
-      audit(db, { actorId: me.id, actorEmail: me.email, action: "user.role_changed", entity: "user", entityId: target.id, metadata: { from: target.role, to: parsed.data.role } });
+      await sql`UPDATE users SET role=${parsed.data.role}, updated_at=${nowIso()} WHERE id=${target.id}`;
+      await audit({ actorId: me.id, actorEmail: me.email, action: "user.role_changed", entity: "user", entityId: target.id, metadata: { from: target.role, to: parsed.data.role } });
       return NextResponse.json({ ok: true });
     }
     if (op === "status") {
       await requireAdmin();
       const parsed = changeStatusSchema.safeParse((body as Record<string, unknown>) ?? {});
       if (!parsed.success) return NextResponse.json({ ok: false, error: "User and status are required." }, { status: 400 });
-      const target = listUsers().find((u) => u.id === parsed.data.userId);
+      const users = await listUsers();
+      const target = users.find((u) => u.id === parsed.data.userId);
       if (!target) return NextResponse.json({ ok: false, error: "User not found." }, { status: 404 });
       if (target.role === "SUPER_ADMIN" && parsed.data.status !== "ACTIVE")
         return deny("The Super Admin account cannot be suspended or disabled here.");
       if (target.id === me.id) return deny("You cannot change your own status.");
-      db.prepare("UPDATE users SET status=?, updated_at=? WHERE id=?").run(parsed.data.status, nowIso(), target.id);
-      db.prepare("DELETE FROM sessions WHERE user_id=?").run(target.id);
-      audit(db, { actorId: me.id, actorEmail: me.email, action: "user.status_changed", entity: "user", entityId: target.id, metadata: { from: target.status, to: parsed.data.status, reason: parsed.data.reason } });
+      await sql`UPDATE users SET status=${parsed.data.status}, updated_at=${nowIso()} WHERE id=${target.id}`;
+      await sql`DELETE FROM sessions WHERE user_id=${target.id}`;
+      await audit({ actorId: me.id, actorEmail: me.email, action: "user.status_changed", entity: "user", entityId: target.id, metadata: { from: target.status, to: parsed.data.status, reason: parsed.data.reason } });
       return NextResponse.json({ ok: true });
     }
     if (op === "reset-password") {
       await requireSuperAdmin();
       const { userId } = (body as Record<string, string>) ?? {};
-      const target = listUsers().find((u) => u.id === userId);
+      const users = await listUsers();
+      const target = users.find((u) => u.id === userId);
       if (!target) return NextResponse.json({ ok: false, error: "User not found." }, { status: 404 });
       const temp = newId().replace(/-/g, "").slice(0, 16);
-      const { hashPassword: hp } = await import("@/lib/tracker-db");
-      db.prepare("UPDATE users SET password_hash=?, must_change_password=1, updated_at=? WHERE id=?").run(hp(temp), nowIso(), target.id);
-      db.prepare("DELETE FROM sessions WHERE user_id=?").run(target.id);
-      audit(db, { actorId: me.id, actorEmail: me.email, action: "user.password_reset", entity: "user", entityId: target.id });
+      await sql`UPDATE users SET password_hash=${hashPassword(temp)}, must_change_password=1, updated_at=${nowIso()} WHERE id=${target.id}`;
+      await sql`DELETE FROM sessions WHERE user_id=${target.id}`;
+      await audit({ actorId: me.id, actorEmail: me.email, action: "user.password_reset", entity: "user", entityId: target.id });
       return NextResponse.json({ ok: true, temporaryPassword: temp });
     }
     return NextResponse.json({ ok: false, error: "Unknown user operation." }, { status: 400 });

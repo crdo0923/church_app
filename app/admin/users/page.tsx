@@ -5,7 +5,7 @@ import { UserManager } from "@/components/app/UserManager";
 
 export default async function AdminUsersPage() {
   const user = await requireSuperAdmin();
-  const users = listUsers();
+  const users = await listUsers();
   return (
     <AppShell
       title="Users"

@@ -1,5 +1,5 @@
 import { requireSuperAdmin } from "@/lib/auth";
-import { dbStatus } from "@/lib/tracker-db";
+import { dbStatus } from "@/lib/pg";
 import { seedSnapshot } from "@/lib/tracker-store";
 import { AppShell } from "@/components/app/AppShell";
 import { Badge } from "@/components/app/Badge";
@@ -9,7 +9,7 @@ import { SeedButton } from "@/components/app/SeedButton";
 export default async function AdminSettingsPage() {
   const user = await requireSuperAdmin();
   const db = dbStatus();
-  const seed = seedSnapshot();
+  const seed = await seedSnapshot();
   return (
     <AppShell
       title="Tracker Settings"
@@ -22,9 +22,9 @@ export default async function AdminSettingsPage() {
         <Card>
           <CardHeading>Data & seed</CardHeading>
           <p className="mt-2 text-xs">
-            <Badge tone={db.writable ? "success" : "warning"}>{db.writable ? "Database writable" : "Snapshot mode"}</Badge>
+            <Badge tone={db.ready ? "success" : "warning"}>{db.ready ? "Database writable" : "Snapshot mode"}</Badge>
           </p>
-          <p className="mt-2 font-mono text-[11px] text-muted">{db.writable ? db.path : (db.error ?? "Set TRACKER_DB_PATH")}</p>
+          <p className="mt-2 font-mono text-[11px] text-muted">{db.ready ? (db.configured ? "Postgres (DATABASE_URL)" : "not configured") : (db.error ?? "Set TRACKER_DB_PATH")}</p>
           <p className="mt-2 text-[13px]">Seed check: {seed.reason}. Seeding only adds missing rows — it never overwrites human updates.</p>
           <div className="mt-2"><SeedButton /></div>
         </Card>

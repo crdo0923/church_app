@@ -54,7 +54,7 @@ function describe(entry: { action: string; entity: string; entityId: string; met
 export default async function ActivityPage() {
   const user = await currentUser();
   if (!user) redirect("/login");
-  const entries = listAudit(60, 0);
+  const entries = await listAudit(60, 0);
   return (
     <AppShell
       title="Activity"

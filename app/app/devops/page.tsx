@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
-import { dbStatus } from "@/lib/tracker-db";
+import { dbStatus } from "@/lib/pg";
 import { AppShell } from "@/components/app/AppShell";
 import { Card, CardHeading } from "@/components/app/Card";
 
@@ -22,7 +22,7 @@ export default async function DeploymentPage() {
           <div><dt className="text-muted">Live URL</dt><dd className="font-mono">roadmapchurch.crdo.site</dd></div>
           <div><dt className="text-muted">Source</dt><dd className="font-mono">crdo0923/church_app</dd></div>
           <div><dt className="text-muted">Runtime</dt><dd>Vercel · Next.js 16</dd></div>
-          <div><dt className="text-muted">Tracker data</dt><dd className="font-mono">{db.writable ? `SQLite (${db.path})` : "Seed snapshot (set TRACKER_DB_PATH)"}</dd></div>
+          <div><dt className="text-muted">Tracker data</dt><dd className="font-mono">{db.ready ? `SQLite (${(db.configured ? "Postgres (DATABASE_URL)" : "not configured")})` : "Seed snapshot (set TRACKER_DB_PATH)"}</dd></div>
         </dl>
         <p className="mt-2 text-xs text-muted">
           The tracker database holds team accounts and roadmap content only. It never connects to LMS production data.

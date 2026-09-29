@@ -36,11 +36,11 @@ export default async function MilestonePage({ params }: { params: Promise<{ id: 
   if (!found) notFound();
   const { phase, milestone } = found;
   const canEdit = user.role === "SUPER_ADMIN" || user.role === "ADMIN" || user.role === "EDITOR";
-  const status = getItemStatus("milestone", milestone.id, "PLANNED");
-  const criteria = listCriteria("milestone", milestone.id);
-  const evidence = listEvidence("milestone", milestone.id);
-  const completions = listCompletions("milestone", milestone.id);
-  const comments = listComments("milestone", milestone.id);
+  const status = await getItemStatus("milestone", milestone.id, "PLANNED");
+  const criteria = await listCriteria("milestone", milestone.id);
+  const evidence = await listEvidence("milestone", milestone.id);
+  const completions = await listCompletions("milestone", milestone.id);
+  const comments = await listComments("milestone", milestone.id);
   const tasks = phase.tasks.filter((t) => t.milestoneId === milestone.id);
 
   const { CriteriaList } = await import("@/components/app/CriteriaList");

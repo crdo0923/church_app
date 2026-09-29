@@ -13,7 +13,7 @@ export default async function AdminAuditPage({
   const { page } = await searchParams;
   const pageNum = Math.max(0, Number.parseInt(page ?? "0", 10) || 0);
   const limit = 50;
-  const entries = listAudit(limit, pageNum * limit);
+  const entries = await listAudit(limit, pageNum * limit);
   return (
     <AppShell
       title="Audit Log"
