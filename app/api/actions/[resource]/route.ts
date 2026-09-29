@@ -14,7 +14,7 @@ import {
   setItemStatus,
 } from "@/lib/tracker-store";
 import { ensureSchema, getSql } from "@/lib/pg";
-import { newId, nowIso, hashToken, hashPassword } from "@/lib/tracker-db";
+import { newId, nowIso, hashToken, hashPasswordAsync } from "@/lib/tracker-db";
 import {
   changeRoleSchema,
   changeStatusSchema,
@@ -259,7 +259,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       const target = users.find((u) => u.id === userId);
       if (!target) return NextResponse.json({ ok: false, error: "User not found." }, { status: 404 });
       const temp = newId().replace(/-/g, "").slice(0, 16);
-      await sql`UPDATE roadmapchurch.users SET password_hash=${hashPassword(temp)}, must_change_password=1, updated_at=${nowIso()} WHERE id=${target.id}`;
+      await sql`UPDATE roadmapchurch.users SET password_hash=${await hashPasswordAsync(temp)}, must_change_password=1, updated_at=${nowIso()} WHERE id=${target.id}`;
       await sql`DELETE FROM roadmapchurch.sessions WHERE user_id=${target.id}`;
       await audit({ actorId: me.id, actorEmail: me.email, action: "user.password_reset", entity: "user", entityId: target.id });
       return NextResponse.json({ ok: true, temporaryPassword: temp });

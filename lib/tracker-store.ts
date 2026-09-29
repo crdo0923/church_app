@@ -13,8 +13,8 @@ import {
   nowIso,
   newId,
   hashToken,
-  hashPassword,
-  verifyPassword,
+  hashPasswordAsync,
+  verifyPasswordAsync,
   newSessionToken,
 } from "./tracker-db";
 import { PHASES, PROJECT_SEED } from "../data/tracker-seed";
@@ -181,7 +181,7 @@ export async function verifyUserPassword(userId: string, password: string): Prom
   if (!sql) return false;
   const rows = await sql`SELECT password_hash FROM roadmapchurch.users WHERE id = ${userId} LIMIT 1`;
   if (!rows[0]) return false;
-  return verifyPassword(password, String(rows[0].password_hash));
+  return verifyPasswordAsync(password, String(rows[0].password_hash));
 }
 
 export async function createSession(userId: string): Promise<Session | null> {
@@ -243,7 +243,7 @@ export async function createUser(
   const password = input.password ?? newSessionToken().slice(0, 16);
   await sql`
     INSERT INTO roadmapchurch.users (id, full_name, email, password_hash, role, status, notes, must_change_password, created_at, updated_at)
-    VALUES (${id}, ${input.fullName}, ${input.email.toLowerCase()}, ${hashPassword(password)}, ${input.role}, ${input.status ?? "ACTIVE"}, ${input.notes ?? ""}, ${input.mustChangePassword ? 1 : 0}, ${now}, ${now})
+    VALUES (${id}, ${input.fullName}, ${input.email.toLowerCase()}, ${await hashPasswordAsync(password)}, ${input.role}, ${input.status ?? "ACTIVE"}, ${input.notes ?? ""}, ${input.mustChangePassword ? 1 : 0}, ${now}, ${now})
   `;
   await audit({
     actorId: input.actorId,

@@ -6,7 +6,7 @@ import {
   verifyUserPassword,
 } from "@/lib/tracker-store";
 import { ensureSchema, getSql } from "@/lib/pg";
-import { newId, nowIso, hashToken, hashPassword } from "@/lib/tracker-db";
+import { newId, nowIso, hashToken, hashPasswordAsync } from "@/lib/tracker-db";
 import { acceptInviteSchema, adminSetupSchema, loginSchema } from "@/lib/validation";
 import { SESSION_COOKIE } from "@/lib/auth";
 
@@ -32,6 +32,20 @@ function dbUnavailable() {
 
 export async function POST(req: Request, { params }: { params: Promise<{ action: string }> }) {
   const { action } = await params;
+  try {
+    return await handleAction(req, action);
+  } catch (err) {
+    // Never leak stack traces; log server-side, return JSON so the client
+    // shows a message instead of a console 500 with no body.
+    console.error(`[auth:${action}]`, err instanceof Error ? err.message : err);
+    return NextResponse.json(
+      { ok: false, error: "Something went wrong. Please try again." },
+      { status: 500 },
+    );
+  }
+}
+
+async function handleAction(req: Request, action: string) {
   if (!(await ensureSchema())) return dbUnavailable();
   const sql = getSql();
   if (!sql) return dbUnavailable();
@@ -88,7 +102,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
     const now = nowIso();
     await sql`
       INSERT INTO roadmapchurch.users (id, full_name, email, password_hash, role, status, notes, must_change_password, created_at, updated_at)
-      VALUES (${id}, ${parsed.data.fullName}, ${parsed.data.email.toLowerCase()}, ${hashPassword(parsed.data.password)}, 'SUPER_ADMIN', 'ACTIVE', 'Initial administrator', 0, ${now}, ${now})
+      VALUES (${id}, ${parsed.data.fullName}, ${parsed.data.email.toLowerCase()}, ${await hashPasswordAsync(parsed.data.password)}, 'SUPER_ADMIN', 'ACTIVE', 'Initial administrator', 0, ${now}, ${now})
     `;
     await audit({ actorId: id, actorEmail: parsed.data.email.toLowerCase(), action: "admin.setup", entity: "user", entityId: id });
     const session = await createSession(id);
@@ -112,7 +126,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
     const now = nowIso();
     await sql`
       INSERT INTO roadmapchurch.users (id, full_name, email, password_hash, role, status, notes, must_change_password, created_at, updated_at)
-      VALUES (${id}, ${parsed.data.fullName}, ${String(invite.email).toLowerCase()}, ${hashPassword(parsed.data.password)}, ${String(invite.role)}, 'ACTIVE', ${String(invite.notes ?? "")}, 0, ${now}, ${now})
+      VALUES (${id}, ${parsed.data.fullName}, ${String(invite.email).toLowerCase()}, ${await hashPasswordAsync(parsed.data.password)}, ${String(invite.role)}, 'ACTIVE', ${String(invite.notes ?? "")}, 0, ${now}, ${now})
     `;
     await sql`UPDATE roadmapchurch.invites SET accepted_at=${now} WHERE id=${String(invite.id)}`;
     await audit({ actorId: id, actorEmail: String(invite.email).toLowerCase(), action: "user.invite_accepted", entity: "user", entityId: id, metadata: { role: String(invite.role) } });

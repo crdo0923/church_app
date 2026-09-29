@@ -276,6 +276,38 @@ export function hashPassword(password: string): string {
   return `scrypt$N=16384$r=8$p=1$${salt.toString("hex")}$${derived.toString("hex")}`;
 }
 
+/** Async scrypt hash — REQUIRED on serverless (scryptSync blocks the event
+ *  loop and trips Vercel's function timeouts under CPU throttling). */
+export function hashPasswordAsync(password: string): Promise<string> {
+  const salt = crypto.randomBytes(16);
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (err, derived) => {
+      if (err) reject(err);
+      else resolve(`scrypt$N=16384$r=8$p=1$${salt.toString("hex")}$${(derived as Buffer).toString("hex")}`);
+    });
+  });
+}
+
+/** Async scrypt verify — REQUIRED on serverless (see hashPasswordAsync). */
+export function verifyPasswordAsync(password: string, stored: string): Promise<boolean> {
+  try {
+    const parts = stored.split("$");
+    if (parts[0] !== "scrypt" || parts.length !== 5) return Promise.resolve(false);
+    const salt = Buffer.from(parts[3], "hex");
+    const expected = Buffer.from(parts[4], "hex");
+    return new Promise((resolve) => {
+      crypto.scrypt(password, salt, 64, (err, derived) => {
+        if (err) return resolve(false);
+        const buf = derived as Buffer;
+        if (buf.length !== expected.length) return resolve(false);
+        resolve(crypto.timingSafeEqual(buf, expected));
+      });
+    });
+  } catch {
+    return Promise.resolve(false);
+  }
+}
+
 export function verifyPassword(password: string, stored: string): boolean {
   try {
     const parts = stored.split("$");

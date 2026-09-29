@@ -4,7 +4,7 @@
  * Run: DATABASE_URL=... npx tsx scripts/e2e-bootstrap.ts
  */
 import { ensureSchema, getSql } from "../lib/pg";
-import { newId, nowIso, hashPassword } from "../lib/tracker-db";
+import { newId, nowIso, hashPasswordAsync } from "../lib/tracker-db";
 import { seedSnapshot, audit } from "../lib/tracker-store";
 
 async function main() {
@@ -25,7 +25,7 @@ async function main() {
     const now = nowIso();
     await sql`
       INSERT INTO roadmapchurch.users (id, full_name, email, password_hash, role, status, notes, must_change_password, created_at, updated_at)
-      VALUES (${id}, 'Ada Admin', 'admin@tracker.local', ${hashPassword("Admin_password_123")}, 'SUPER_ADMIN', 'ACTIVE', 'E2E bootstrap', 0, ${now}, ${now})
+      VALUES (${id}, 'Ada Admin', 'admin@tracker.local', ${await hashPasswordAsync("Admin_password_123")}, 'SUPER_ADMIN', 'ACTIVE', 'E2E bootstrap', 0, ${now}, ${now})
     `;
     await audit({ actorId: id, actorEmail: "admin@tracker.local", action: "admin.setup", entity: "user", entityId: id });
     console.log("admin created: admin@tracker.local");
