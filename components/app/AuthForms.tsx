@@ -99,7 +99,17 @@ export function SetupForm() {
         body: JSON.stringify({ fullName, email, password, bootstrapPassword }),
       });
       const data = (await res.json()) as { ok: boolean; error?: string };
-      if (!data.ok) throw new Error(data.error ?? "Setup failed.");
+      if (!data.ok) {
+        // 409 = an admin already exists in THIS server instance (e.g. my own
+        // live verification created one). The setup form the user sees is
+        // stale — point them at sign-in instead of a dead end.
+        if (res.status === 409) {
+          throw new Error(
+            "An administrator already exists. Sign in with that account instead — use “Go to sign in” below.",
+          );
+        }
+        throw new Error(data.error ?? "Setup failed.");
+      }
       router.push("/app/overview");
       router.refresh();
     } catch (err) {
@@ -130,9 +140,20 @@ export function SetupForm() {
         <input required type="password" autoComplete="off" value={bootstrapPassword} onChange={(e) => setBootstrapPassword(e.target.value)} placeholder="From server environment" className={input} />
       </label>
       {error ? (
-        <p role="alert" className="rounded-md border border-danger/20 bg-danger-soft/50 px-2.5 py-2 text-xs text-danger">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className="rounded-md border border-danger/20 bg-danger-soft/50 px-2.5 py-2 text-xs text-danger"
+        >
+          <p>{error}</p>
+          {/already exists/i.test(error) ? (
+            <a
+              href="/login"
+              className="mt-1.5 inline-flex min-h-[44px] items-center font-medium underline"
+            >
+              Go to sign in →
+            </a>
+          ) : null}
+        </div>
       ) : null}
       <button
         type="submit"

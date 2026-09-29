@@ -4,6 +4,12 @@ import { bootstrapNeeded } from "@/lib/tracker-store";
 import { currentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
+// Never cache: the setup-vs-login decision depends on live DB state, and a
+// cached setup form is exactly what produces the confusing 409 in the
+// screenshot (stale form posted after an admin already exists).
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function LoginPage({
   searchParams,
 }: {
