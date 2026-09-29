@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Church Leadership LMS — Engineering Command Center",
+  title: "Church Leadership LMS — Project Roadmap",
   description:
-    "Internal engineering roadmap and project-tracking platform for building the Church Leadership LMS.",
+    "Human-maintained project roadmap tracker for building the Church Leadership LMS.",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

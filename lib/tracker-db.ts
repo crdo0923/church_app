@@ -6,10 +6,11 @@
  * - Roadmap progress is set by humans; nothing external auto-completes items (§38).
  * - SQLite file lives OUTSIDE version control: TRACKER_DB_PATH or
  *   .data/tracker.db (gitignored). The file persists on the team server /
- *   single host; for Vercel serverless the file is ephemeral, so also set
- *   TRACKER_SEED_ON_BOOT=1 or run seed via an API/admin action after deploy —
- *   reads ALWAYS fall back to the bundled seed snapshot so the app never
- *   crashes without a DB, and writes land in the local file when writable.
+ *   single host; for Vercel serverless the file is ephemeral, so the module
+ *   falls back to an in-memory database (`:memory:`) when the file cannot be
+ *   created — reads ALWAYS fall back to the bundled seed snapshot on top of
+ *   that, so the app never 503s, and writes work for the lifetime of the
+ *   serverless instance.
  */
 
 import { DatabaseSync } from "node:sqlite";
@@ -212,38 +213,48 @@ export function dbStatus(): {
 
 export function getDb(): DatabaseSync | null {
   if (db) return dbWritable ? db : null;
-  try {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    const handle = new DatabaseSync(DB_PATH);
-    handle.exec(DDL);
-    const row = handle
-      .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-      .get() as { value: string } | undefined;
-    if (!row) {
-      handle
-        .prepare("INSERT INTO meta (key, value) VALUES ('schema_version', ?)")
-        .run(String(SCHEMA_VERSION));
+  // Try the file path first; fall back to :memory: (serverless-safe).
+  const candidates = DB_PATH === ":memory:" ? [":memory:"] : [DB_PATH, ":memory:"];
+  let lastError: string | null = null;
+  for (const candidate of candidates) {
+    try {
+      if (candidate !== ":memory:") {
+        fs.mkdirSync(path.dirname(candidate), { recursive: true });
+      }
+      const handle = new DatabaseSync(candidate);
+      handle.exec(DDL);
+      const row = handle
+        .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
+        .get() as { value: string } | undefined;
+      if (!row) {
+        handle
+          .prepare("INSERT INTO meta (key, value) VALUES ('schema_version', ?)")
+          .run(String(SCHEMA_VERSION));
+      }
+      // Ensure singleton project_state row exists
+      const existing = handle
+        .prepare("SELECT id FROM project_state WHERE id = 'singleton'")
+        .get();
+      if (!existing) {
+        handle
+          .prepare(
+            "INSERT INTO project_state (id, project_status, current_phase_number, overall_progress, progress_source, current_focus, blocker_note, updated_at) VALUES ('singleton','PLANNING','01',0,'CALCULATED','','',?)",
+          )
+          .run(new Date().toISOString());
+      }
+      db = handle;
+      dbWritable = true;
+      dbInitError = candidate === ":memory:" ? "file unavailable — using in-memory database" : null;
+      return db;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      continue;
     }
-    // Ensure singleton project_state row exists
-    const existing = handle
-      .prepare("SELECT id FROM project_state WHERE id = 'singleton'")
-      .get();
-    if (!existing) {
-      handle
-        .prepare(
-          "INSERT INTO project_state (id, project_status, current_phase_number, overall_progress, progress_source, current_focus, blocker_note, updated_at) VALUES ('singleton','PLANNING','01',0,'CALCULATED','','',?)",
-        )
-        .run(new Date().toISOString());
-    }
-    db = handle;
-    dbWritable = true;
-    return db;
-  } catch (err) {
-    dbInitError = err instanceof Error ? err.message : String(err);
-    db = null;
-    dbWritable = false;
-    return null;
   }
+  dbInitError = lastError;
+  db = null;
+  dbWritable = false;
+  return null;
 }
 
 export function nowIso(): string {
