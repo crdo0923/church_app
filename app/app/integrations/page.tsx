@@ -1,48 +1,39 @@
+import { redirect } from "next/navigation";
+import { currentUser } from "@/lib/auth";
 import { AppShell } from "@/components/app/AppShell";
 import { Badge } from "@/components/app/Badge";
 import { Card, CardHeading } from "@/components/app/Card";
 
 const ROWS = [
-  { provider: "GoHighLevel", category: "CRM / automation", status: "PLANNED" as const, note: "Contacts + enrollment workflow; webhook inbound later." },
-  { provider: "Google Workspace", category: "Identity / docs / calendar", status: "PLANNED" as const, note: "OAuth + Drive/Calendar read later." },
-  { provider: "Microsoft 365", category: "Identity / mail / calendar", status: "PLANNED" as const, note: "OAuth + Graph read later." },
-  { provider: "Email Service", category: "Messaging", status: "PLANNED" as const, note: "Transactional sender; server-only key." },
-  { provider: "SMS / Messaging", category: "Messaging", status: "PLANNED" as const, note: "Reminders with opt-in proof." },
-  { provider: "Payment Provider", category: "Billing", status: "PLANNED" as const, note: "Enrollment fees + signed webhooks." },
-  { provider: "Video Conferencing", category: "Classes", status: "PLANNED" as const, note: "Meeting links + recording metadata." },
+  { provider: "GoHighLevel", note: "Planned LMS integration — specification tracked in Phase 07. No sync in this tracker." },
+  { provider: "Google Workspace", note: "Planned LMS integration — specification only." },
+  { provider: "Microsoft 365", note: "Planned LMS integration — specification only." },
+  { provider: "Email / SMS", note: "Planned LMS notification channels — specification only." },
+  { provider: "Payments", note: "Planned LMS enrollment billing — specification only." },
+  { provider: "Video conferencing", note: "Planned LMS class delivery — specification only." },
 ];
 
-export default function IntegrationsPage() {
+export default async function IntegrationsPage() {
+  const user = await currentUser();
+  if (!user) redirect("/login");
   return (
     <AppShell
       title="Integrations"
-      subtitle="Configuration + health records first — no live third-party sync in MVP"
+      subtitle="Planned LMS integrations — documented here, never connected here"
       activePath="/app/integrations"
+      user={{ fullName: user.fullName, role: user.role }}
+      showAdmin={user.role === "SUPER_ADMIN"}
     >
       <Card>
-        <CardHeading>Provider registry (reference)</CardHeading>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-border font-mono text-[11px] uppercase tracking-wide text-muted">
-                <th className="py-2 pr-3">Provider</th>
-                <th className="py-2 pr-3">Category</th>
-                <th className="py-2 pr-3">Status</th>
-                <th className="py-2">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ROWS.map((r) => (
-                <tr key={r.provider} className="border-b border-border/60 last:border-0">
-                  <td className="py-2 pr-3 font-medium">{r.provider}</td>
-                  <td className="py-2 pr-3 text-muted">{r.category}</td>
-                  <td className="py-2 pr-3"><Badge tone="neutral">{r.status}</Badge></td>
-                  <td className="py-2 text-muted">{r.note}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <CardHeading>Provider list (planned)</CardHeading>
+        <ul className="mt-3 space-y-2 text-[13px]">
+          {ROWS.map((r) => (
+            <li key={r.provider} className="rounded-md border border-border bg-background px-2.5 py-2">
+              <p className="font-medium">{r.provider} <Badge tone="neutral">Planned</Badge></p>
+              <p className="mt-0.5 text-xs text-muted">{r.note}</p>
+            </li>
+          ))}
+        </ul>
       </Card>
     </AppShell>
   );

@@ -4,9 +4,15 @@ out/
 dist/
 build/
 coverage/
+test-results/
+playwright-report/
 .env
 .env.local
 .env*.local
+.data/
+*.db
+*.db-wal
+*.db-shm
 .vercel/
 .supabase/
 drizzle/*.log

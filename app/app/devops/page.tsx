@@ -1,19 +1,32 @@
+import { redirect } from "next/navigation";
+import { currentUser } from "@/lib/auth";
+import { dbStatus } from "@/lib/tracker-db";
 import { AppShell } from "@/components/app/AppShell";
 import { Card, CardHeading } from "@/components/app/Card";
 
-export default function DevOpsPage() {
+export default async function DeploymentPage() {
+  const user = await currentUser();
+  if (!user) redirect("/login");
+  const db = dbStatus();
   return (
-    <AppShell title="DevOps" subtitle="Reference — live deployment tracking ships with Phase I" activePath="/app/devops">
+    <AppShell
+      title="Deployment"
+      subtitle="Where this tracker runs — not LMS production"
+      activePath="/app/devops"
+      user={{ fullName: user.fullName, role: user.role }}
+      showAdmin={user.role === "SUPER_ADMIN"}
+    >
       <Card>
-        <CardHeading>Topology (reference)</CardHeading>
-        <p className="mt-2 font-mono text-xs leading-loose text-muted">
-          Developer → GitHub (crdo0923/church_app) → CI → Vercel Preview → QA → https://roadmapchurch.crdo.site
-          <br />Supabase: PostgreSQL + Auth + Storage · Sentry + Vercel Observability
+        <CardHeading>This tracker</CardHeading>
+        <dl className="mt-2 grid gap-2 text-[13px] sm:grid-cols-2">
+          <div><dt className="text-muted">Live URL</dt><dd className="font-mono">roadmapchurch.crdo.site</dd></div>
+          <div><dt className="text-muted">Source</dt><dd className="font-mono">crdo0923/church_app</dd></div>
+          <div><dt className="text-muted">Runtime</dt><dd>Vercel · Next.js 16</dd></div>
+          <div><dt className="text-muted">Tracker data</dt><dd className="font-mono">{db.writable ? `SQLite (${db.path})` : "Seed snapshot (set TRACKER_DB_PATH)"}</dd></div>
+        </dl>
+        <p className="mt-2 text-xs text-muted">
+          The tracker database holds team accounts and roadmap content only. It never connects to LMS production data.
         </p>
-      </Card>
-      <Card className="mt-3">
-        <CardHeading>Environments</CardHeading>
-        <p className="mt-2 text-[13px] text-foreground/80">LOCAL → DEVELOPMENT → PREVIEW (per-PR) → STAGING → PRODUCTION. Details in docs/environments.md.</p>
       </Card>
     </AppShell>
   );
