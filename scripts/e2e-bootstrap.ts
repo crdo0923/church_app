@@ -19,12 +19,12 @@ async function main() {
   }
   const seed = await seedSnapshot();
   console.log("seed:", seed.reason);
-  const existing = await sql`SELECT id FROM users WHERE email='admin@tracker.local' LIMIT 1`;
+  const existing = await sql`SELECT id FROM roadmapchurch.users WHERE email='admin@tracker.local' LIMIT 1`;
   if (!existing[0]) {
     const id = newId();
     const now = nowIso();
     await sql`
-      INSERT INTO users (id, full_name, email, password_hash, role, status, notes, must_change_password, created_at, updated_at)
+      INSERT INTO roadmapchurch.users (id, full_name, email, password_hash, role, status, notes, must_change_password, created_at, updated_at)
       VALUES (${id}, 'Ada Admin', 'admin@tracker.local', ${hashPassword("Admin_password_123")}, 'SUPER_ADMIN', 'ACTIVE', 'E2E bootstrap', 0, ${now}, ${now})
     `;
     await audit({ actorId: id, actorEmail: "admin@tracker.local", action: "admin.setup", entity: "user", entityId: id });

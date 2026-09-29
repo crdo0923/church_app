@@ -148,7 +148,7 @@ export async function audit(entry: {
   const sql = await db();
   if (!sql) return;
   await sql`
-    INSERT INTO audit_log (id, actor_id, actor_email, action, entity, entity_id, metadata, created_at)
+    INSERT INTO roadmapchurch.audit_log (id, actor_id, actor_email, action, entity, entity_id, metadata, created_at)
     VALUES (${newId()}, ${entry.actorId ?? null}, ${entry.actorEmail ?? ""}, ${entry.action}, ${entry.entity}, ${entry.entityId ?? ""}, ${JSON.stringify(entry.metadata ?? {})}, ${nowIso()})
   `;
 }
@@ -156,7 +156,7 @@ export async function audit(entry: {
 export async function bootstrapNeeded(): Promise<boolean> {
   const sql = await db();
   if (!sql) return true;
-  const rows = await sql`SELECT COUNT(*)::int AS n FROM users WHERE role = 'SUPER_ADMIN'`;
+  const rows = await sql`SELECT COUNT(*)::int AS n FROM roadmapchurch.users WHERE role = 'SUPER_ADMIN'`;
   return Number(rows[0]?.n ?? 0) === 0;
 }
 
@@ -165,21 +165,21 @@ export async function bootstrapNeeded(): Promise<boolean> {
 export async function findUserByEmail(email: string): Promise<TrackerUser | null> {
   const sql = await db();
   if (!sql) return null;
-  const rows = await sql`SELECT * FROM users WHERE lower(email) = lower(${email}) LIMIT 1`;
+  const rows = await sql`SELECT * FROM roadmapchurch.users WHERE lower(email) = lower(${email}) LIMIT 1`;
   return rows[0] ? rowToUser(rows[0] as Row) : null;
 }
 
 export async function findUserById(id: string): Promise<TrackerUser | null> {
   const sql = await db();
   if (!sql) return null;
-  const rows = await sql`SELECT * FROM users WHERE id = ${id} LIMIT 1`;
+  const rows = await sql`SELECT * FROM roadmapchurch.users WHERE id = ${id} LIMIT 1`;
   return rows[0] ? rowToUser(rows[0] as Row) : null;
 }
 
 export async function verifyUserPassword(userId: string, password: string): Promise<boolean> {
   const sql = await db();
   if (!sql) return false;
-  const rows = await sql`SELECT password_hash FROM users WHERE id = ${userId} LIMIT 1`;
+  const rows = await sql`SELECT password_hash FROM roadmapchurch.users WHERE id = ${userId} LIMIT 1`;
   if (!rows[0]) return false;
   return verifyPassword(password, String(rows[0].password_hash));
 }
@@ -192,7 +192,7 @@ export async function createSession(userId: string): Promise<Session | null> {
   const now = new Date();
   const expires = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 14).toISOString();
   await sql`
-    INSERT INTO sessions (id, user_id, token_hash, created_at, expires_at)
+    INSERT INTO roadmapchurch.sessions (id, user_id, token_hash, created_at, expires_at)
     VALUES (${id}, ${userId}, ${hashToken(token)}, ${now.toISOString()}, ${expires})
   `;
   return { id, userId, token, expiresAt: expires };
@@ -203,7 +203,7 @@ export async function getSessionUser(token: string | undefined | null): Promise<
   const sql = await db();
   if (!sql) return null;
   const rows = await sql`
-    SELECT s.expires_at, u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ${hashToken(token)} LIMIT 1
+    SELECT s.expires_at, u.* FROM roadmapchurch.sessions s JOIN roadmapchurch.users u ON u.id = s.user_id WHERE s.token_hash = ${hashToken(token)} LIMIT 1
   `;
   if (!rows[0]) return null;
   const row = rows[0] as Row;
@@ -216,7 +216,7 @@ export async function getSessionUser(token: string | undefined | null): Promise<
 export async function destroySession(token: string): Promise<void> {
   const sql = await db();
   if (!sql) return;
-  await sql`DELETE FROM sessions WHERE token_hash = ${hashToken(token)}`;
+  await sql`DELETE FROM roadmapchurch.sessions WHERE token_hash = ${hashToken(token)}`;
 }
 
 export interface CreateUserInput {
@@ -236,13 +236,13 @@ export async function createUser(
 ): Promise<{ ok: boolean; user?: TrackerUser; error?: string }> {
   const sql = await db();
   if (!sql) return { ok: false, error: "Database unavailable" };
-  const existing = await sql`SELECT id FROM users WHERE lower(email) = lower(${input.email}) LIMIT 1`;
+  const existing = await sql`SELECT id FROM roadmapchurch.users WHERE lower(email) = lower(${input.email}) LIMIT 1`;
   if (existing[0]) return { ok: false, error: "Email already in use" };
   const id = newId();
   const now = nowIso();
   const password = input.password ?? newSessionToken().slice(0, 16);
   await sql`
-    INSERT INTO users (id, full_name, email, password_hash, role, status, notes, must_change_password, created_at, updated_at)
+    INSERT INTO roadmapchurch.users (id, full_name, email, password_hash, role, status, notes, must_change_password, created_at, updated_at)
     VALUES (${id}, ${input.fullName}, ${input.email.toLowerCase()}, ${hashPassword(password)}, ${input.role}, ${input.status ?? "ACTIVE"}, ${input.notes ?? ""}, ${input.mustChangePassword ? 1 : 0}, ${now}, ${now})
   `;
   await audit({
@@ -269,7 +269,7 @@ export async function seedSnapshot(): Promise<{ seeded: boolean; reason: string 
     for (const [i, d] of phase.deliverables.entries()) {
       const id = `${phaseId}-deliverable-${i}`;
       await sql`
-        INSERT INTO deliverables (id, phase_number, label, owner, status, notes, position, created_at, updated_at)
+        INSERT INTO roadmapchurch.deliverables (id, phase_number, label, owner, status, notes, position, created_at, updated_at)
         VALUES (${id}, ${phase.number}, ${d.label}, ${d.owner}, 'INCOMPLETE', '', ${i}, ${nowIso()}, ${nowIso()})
         ON CONFLICT (id) DO NOTHING
       `;
@@ -277,30 +277,30 @@ export async function seedSnapshot(): Promise<{ seeded: boolean; reason: string 
     for (const [i, a] of phase.acceptance.entries()) {
       const id = `${phaseId}-criterion-${i}`;
       await sql`
-        INSERT INTO criteria (id, entity_type, entity_id, label, category, requirement, status, notes, position, created_at, updated_at)
+        INSERT INTO roadmapchurch.criteria (id, entity_type, entity_id, label, category, requirement, status, notes, position, created_at, updated_at)
         VALUES (${id}, 'phase', ${phaseId}, ${a.label}, ${a.category}, 'REQUIRED', ${DEFAULT_CRITERION_STATUS}, '', ${i}, ${nowIso()}, ${nowIso()})
         ON CONFLICT (id) DO NOTHING
       `;
     }
     for (const m of phase.milestones) {
       await sql`
-        INSERT INTO milestones (id, phase_number, title, description, objective, owner, target_date, created_at, updated_at)
+        INSERT INTO roadmapchurch.milestones (id, phase_number, title, description, objective, owner, target_date, created_at, updated_at)
         VALUES (${m.id}, ${phase.number}, ${m.title}, ${m.description}, ${m.objective}, ${m.owner}, ${m.targetDate}, ${nowIso()}, ${nowIso()})
         ON CONFLICT (id) DO NOTHING
       `;
     }
     for (const task of phase.tasks) {
       await sql`
-        INSERT INTO tasks (id, phase_number, milestone_id, title, summary, description, owner, priority, target_date, dependencies, technical_notes, created_at, updated_at)
+        INSERT INTO roadmapchurch.tasks (id, phase_number, milestone_id, title, summary, description, owner, priority, target_date, dependencies, technical_notes, created_at, updated_at)
         VALUES (${task.id}, ${phase.number}, ${task.milestoneId}, ${task.title}, ${task.summary}, ${task.description}, ${task.owner}, 'MEDIUM', '', '', '', ${nowIso()}, ${nowIso()})
         ON CONFLICT (id) DO NOTHING
       `;
     }
   }
-  const updates = await sql`SELECT COUNT(*)::int AS n FROM project_updates`;
+  const updates = await sql`SELECT COUNT(*)::int AS n FROM roadmapchurch.project_updates`;
   if (Number(updates[0]?.n ?? 0) === 0) {
     await sql`
-      UPDATE project_state SET project_status=${PROJECT_SEED.status}, current_phase_number=${PROJECT_SEED.currentPhaseNumber},
+      UPDATE roadmapchurch.project_state SET project_status=${PROJECT_SEED.status}, current_phase_number=${PROJECT_SEED.currentPhaseNumber},
         overall_progress=${PROJECT_SEED.overallProgress}, progress_source=${PROJECT_SEED.progressSource},
         current_focus=${PROJECT_SEED.currentFocus}, blocker_note=${PROJECT_SEED.blockerNote}, updated_at=${nowIso()}
       WHERE id='singleton'
@@ -325,7 +325,7 @@ const FALLBACK_STATE: ProjectState = {
 export async function getProjectState(): Promise<ProjectState> {
   const sql = await db();
   if (sql) {
-    const rows = await sql`SELECT * FROM project_state WHERE id='singleton' LIMIT 1`;
+    const rows = await sql`SELECT * FROM roadmapchurch.project_state WHERE id='singleton' LIMIT 1`;
     const row = rows[0] as Row | undefined;
     if (row) {
       return {
@@ -361,11 +361,11 @@ export async function saveProjectUpdate(input: {
   const id = newId();
   const now = nowIso();
   await sql`
-    INSERT INTO project_updates (id, project_status, current_phase_number, overall_progress, progress_source, current_focus, what_changed, whats_next, blocker_note, update_note, created_by, created_at)
+    INSERT INTO roadmapchurch.project_updates (id, project_status, current_phase_number, overall_progress, progress_source, current_focus, what_changed, whats_next, blocker_note, update_note, created_by, created_at)
     VALUES (${id}, ${input.projectStatus}, ${input.currentPhaseNumber}, ${input.overallProgress}, ${input.progressSource}, ${input.currentFocus}, ${input.whatChanged}, ${input.whatsNext}, ${input.blockerNote}, ${input.updateNote}, ${input.actorId ?? null}, ${now})
   `;
   await sql`
-    UPDATE project_state SET project_status=${input.projectStatus}, current_phase_number=${input.currentPhaseNumber},
+    UPDATE roadmapchurch.project_state SET project_status=${input.projectStatus}, current_phase_number=${input.currentPhaseNumber},
       overall_progress=${input.overallProgress}, progress_source=${input.progressSource},
       current_focus=${input.currentFocus}, blocker_note=${input.blockerNote},
       updated_by=${input.actorId ?? null}, updated_at=${now} WHERE id='singleton'
@@ -389,7 +389,7 @@ export async function saveProjectUpdate(input: {
 export async function listProjectUpdates(limit = 20): Promise<ProjectUpdate[]> {
   const sql = await db();
   if (!sql) return [];
-  const rows = await sql`SELECT * FROM project_updates ORDER BY created_at DESC LIMIT ${limit}`;
+  const rows = await sql`SELECT * FROM roadmapchurch.project_updates ORDER BY created_at DESC LIMIT ${limit}`;
   return (rows as Row[]).map((r) => ({
     id: String(r.id),
     projectStatus: String(r.project_status),
@@ -437,7 +437,7 @@ export async function getItemStatus(
 ): Promise<string> {
   const sql = await db();
   if (!sql) return fallback;
-  const rows = await sql`SELECT status FROM item_status WHERE entity_type = ${entityType} AND entity_id = ${entityId} LIMIT 1`;
+  const rows = await sql`SELECT status FROM roadmapchurch.item_status WHERE entity_type = ${entityType} AND entity_id = ${entityId} LIMIT 1`;
   return rows[0] ? String(rows[0].status) : fallback;
 }
 
@@ -467,7 +467,7 @@ export async function listPhases(): Promise<PhaseView[]> {
     const sql = await db();
     let manual: number | null = null;
     if (sql) {
-      const rows = await sql`SELECT percent FROM manual_progress WHERE entity_type='phase' AND entity_id=${phaseId} LIMIT 1`;
+      const rows = await sql`SELECT percent FROM roadmapchurch.manual_progress WHERE entity_type='phase' AND entity_id=${phaseId} LIMIT 1`;
       if (rows[0]) manual = Number(rows[0].percent);
     }
     // Phase 01 ships at the human-set 42% manual snapshot until someone updates it.
@@ -507,7 +507,7 @@ export function getPhase(number: string) {
 export async function listCriteria(entityType: string, entityId: string): Promise<Criterion[]> {
   const sql = await db();
   if (!sql) return [];
-  const rows = await sql`SELECT * FROM criteria WHERE entity_type=${entityType} AND entity_id=${entityId} ORDER BY position, created_at`;
+  const rows = await sql`SELECT * FROM roadmapchurch.criteria WHERE entity_type=${entityType} AND entity_id=${entityId} ORDER BY position, created_at`;
   return (rows as Row[]).map((r) => ({
     id: String(r.id),
     entityType: r.entity_type as Criterion["entityType"],
@@ -532,10 +532,10 @@ export async function addCriterion(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const sql = await db();
   if (!sql) return { ok: false, error: "Database unavailable" };
-  const count = await sql`SELECT COUNT(*)::int AS n FROM criteria WHERE entity_type=${input.entityType} AND entity_id=${input.entityId}`;
+  const count = await sql`SELECT COUNT(*)::int AS n FROM roadmapchurch.criteria WHERE entity_type=${input.entityType} AND entity_id=${input.entityId}`;
   const id = newId();
   await sql`
-    INSERT INTO criteria (id, entity_type, entity_id, label, category, requirement, status, notes, position, created_at, updated_at)
+    INSERT INTO roadmapchurch.criteria (id, entity_type, entity_id, label, category, requirement, status, notes, position, created_at, updated_at)
     VALUES (${id}, ${input.entityType}, ${input.entityId}, ${input.label}, ${input.category}, ${input.requirement}, 'INCOMPLETE', '', ${Number(count[0]?.n ?? 0)}, ${nowIso()}, ${nowIso()})
   `;
   await audit({ actorId: input.actorId, actorEmail: input.actorEmail, action: "criterion.added", entity: input.entityType, entityId: input.entityId, metadata: { label: input.label } });
@@ -549,10 +549,10 @@ export async function setCriterionStatus(
 ): Promise<{ ok: boolean; error?: string }> {
   const sql = await db();
   if (!sql) return { ok: false, error: "Database unavailable" };
-  const rows = await sql`SELECT * FROM criteria WHERE id=${id} LIMIT 1`;
+  const rows = await sql`SELECT * FROM roadmapchurch.criteria WHERE id=${id} LIMIT 1`;
   if (!rows[0]) return { ok: false, error: "Criterion not found" };
   const row = rows[0] as Row;
-  await sql`UPDATE criteria SET status=${status}, updated_at=${nowIso()} WHERE id=${id}`;
+  await sql`UPDATE roadmapchurch.criteria SET status=${status}, updated_at=${nowIso()} WHERE id=${id}`;
   await audit({ actorId: actor.id, actorEmail: actor.email, action: "criterion.updated", entity: String(row.entity_type), entityId: String(row.entity_id), metadata: { criterionId: id, status } });
   return { ok: true };
 }
@@ -560,7 +560,7 @@ export async function setCriterionStatus(
 export async function listEvidence(entityType: string, entityId: string): Promise<Evidence[]> {
   const sql = await db();
   if (!sql) return [];
-  const rows = await sql`SELECT * FROM evidence WHERE entity_type=${entityType} AND entity_id=${entityId} ORDER BY created_at DESC`;
+  const rows = await sql`SELECT * FROM roadmapchurch.evidence WHERE entity_type=${entityType} AND entity_id=${entityId} ORDER BY created_at DESC`;
   return (rows as Row[]).map((r) => ({
     id: String(r.id),
     entityType: String(r.entity_type),
@@ -587,7 +587,7 @@ export async function addEvidence(input: {
   const sql = await db();
   if (!sql) return { ok: false, error: "Database unavailable" };
   await sql`
-    INSERT INTO evidence (id, entity_type, entity_id, kind, label, url, text, created_by, created_at)
+    INSERT INTO roadmapchurch.evidence (id, entity_type, entity_id, kind, label, url, text, created_by, created_at)
     VALUES (${newId()}, ${input.entityType}, ${input.entityId}, ${input.kind}, ${input.label}, ${input.url}, ${input.text}, ${input.actorId ?? null}, ${nowIso()})
   `;
   await audit({ actorId: input.actorId, actorEmail: input.actorEmail, action: "evidence.added", entity: input.entityType, entityId: input.entityId, metadata: { label: input.label, kind: input.kind } });
@@ -605,7 +605,7 @@ export async function setItemStatus(
   if (!sql) return { ok: false, error: "Database unavailable" };
   const prev = await getItemStatus(entityType, entityId, "");
   await sql`
-    INSERT INTO item_status (entity_type, entity_id, status, updated_by, updated_at)
+    INSERT INTO roadmapchurch.item_status (entity_type, entity_id, status, updated_by, updated_at)
     VALUES (${entityType}, ${entityId}, ${status}, ${actor.id ?? null}, ${nowIso()})
     ON CONFLICT (entity_type, entity_id) DO UPDATE SET status=EXCLUDED.status, updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at
   `;
@@ -624,7 +624,7 @@ export async function recordCompletion(
   const sql = await db();
   if (!sql) return { ok: false, error: "Database unavailable" };
   await sql`
-    INSERT INTO completion_records (id, entity_type, entity_id, action, notes, override_reason, actor_id, created_at)
+    INSERT INTO roadmapchurch.completion_records (id, entity_type, entity_id, action, notes, override_reason, actor_id, created_at)
     VALUES (${newId()}, ${entityType}, ${entityId}, ${action}, ${notes}, ${overrideReason}, ${actor.id ?? null}, ${nowIso()})
   `;
   const next = action === "REOPENED" ? "REOPENED" : "COMPLETED";
@@ -644,7 +644,7 @@ export async function listCompletions(
 ): Promise<CompletionRecord[]> {
   const sql = await db();
   if (!sql) return [];
-  const rows = await sql`SELECT * FROM completion_records WHERE entity_type=${entityType} AND entity_id=${entityId} ORDER BY created_at DESC`;
+  const rows = await sql`SELECT * FROM roadmapchurch.completion_records WHERE entity_type=${entityType} AND entity_id=${entityId} ORDER BY created_at DESC`;
   return (rows as Row[]).map((r) => ({
     id: String(r.id),
     entityType: String(r.entity_type),
@@ -667,14 +667,14 @@ export async function addComment(
 ): Promise<{ ok: boolean; error?: string }> {
   const sql = await db();
   if (!sql) return { ok: false, error: "Database unavailable" };
-  await sql`INSERT INTO comments (id, entity_type, entity_id, body, author_id, created_at) VALUES (${newId()}, ${entityType}, ${entityId}, ${body}, ${actor.id ?? null}, ${nowIso()})`;
+  await sql`INSERT INTO roadmapchurch.comments (id, entity_type, entity_id, body, author_id, created_at) VALUES (${newId()}, ${entityType}, ${entityId}, ${body}, ${actor.id ?? null}, ${nowIso()})`;
   return { ok: true };
 }
 
 export async function listComments(entityType: string, entityId: string) {
   const sql = await db();
   if (!sql) return [];
-  const rows = await sql`SELECT * FROM comments WHERE entity_type=${entityType} AND entity_id=${entityId} ORDER BY created_at ASC`;
+  const rows = await sql`SELECT * FROM roadmapchurch.comments WHERE entity_type=${entityType} AND entity_id=${entityId} ORDER BY created_at ASC`;
   return (rows as Row[]).map((r) => ({
     id: String(r.id),
     body: String(r.body),
@@ -686,7 +686,7 @@ export async function listComments(entityType: string, entityId: string) {
 export async function listAudit(limit = 100, offset = 0): Promise<AuditEntry[]> {
   const sql = await db();
   if (!sql) return [];
-  const rows = await sql`SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+  const rows = await sql`SELECT * FROM roadmapchurch.audit_log ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
   return (rows as Row[]).map((r) => ({
     id: String(r.id),
     actorId: (r.actor_id as string) ?? null,
@@ -708,7 +708,7 @@ export async function listAudit(limit = 100, offset = 0): Promise<AuditEntry[]> 
 export async function listUsers(): Promise<TrackerUser[]> {
   const sql = await db();
   if (!sql) return [];
-  const rows = await sql`SELECT * FROM users ORDER BY created_at ASC`;
+  const rows = await sql`SELECT * FROM roadmapchurch.users ORDER BY created_at ASC`;
   return (rows as Row[]).map(rowToUser);
 }
 
@@ -720,14 +720,14 @@ export async function getManualProgress(
 ): Promise<number | null> {
   const sql = await db();
   if (!sql) return null;
-  const rows = await sql`SELECT percent FROM manual_progress WHERE entity_type=${entityType} AND entity_id=${entityId} LIMIT 1`;
+  const rows = await sql`SELECT percent FROM roadmapchurch.manual_progress WHERE entity_type=${entityType} AND entity_id=${entityId} LIMIT 1`;
   return rows[0] ? Number(rows[0].percent) : null;
 }
 
 export async function listDeliverables(phaseNumber: string) {
   const sql = await db();
   if (!sql) return [];
-  const rows = await sql`SELECT * FROM deliverables WHERE phase_number=${phaseNumber} ORDER BY position`;
+  const rows = await sql`SELECT * FROM roadmapchurch.deliverables WHERE phase_number=${phaseNumber} ORDER BY position`;
   return (rows as Row[]).map((r) => ({
     id: String(r.id),
     label: String(r.label),

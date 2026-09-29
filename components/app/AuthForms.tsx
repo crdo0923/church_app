@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 async function postAction(action: string, payload: Record<string, unknown>) {
   const res = await fetch(`/api/auth/${action}`, {
@@ -15,7 +14,6 @@ async function postAction(action: string, payload: Record<string, unknown>) {
 }
 
 export function LoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -27,8 +25,10 @@ export function LoginForm() {
     setBusy(true);
     try {
       await postAction("login", { email, password });
-      router.push("/app/overview");
-      router.refresh();
+      // Full reload so the freshly-set session cookie is definitely applied.
+      // full reload: fresh Set-Cookie must apply before overview renders (router.push races it)
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/app/overview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed.");
     } finally {
@@ -80,7 +80,6 @@ export function LoginForm() {
 }
 
 export function SetupForm() {
-  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -110,8 +109,12 @@ export function SetupForm() {
         }
         throw new Error(data.error ?? "Setup failed.");
       }
-      router.push("/app/overview");
-      router.refresh();
+      // Full reload (not router.push): guarantees the fresh session cookie is
+      // applied before /app/overview renders. Client-side push after a
+      // Set-Cookie can land back on /login with a stale cookie jar.
+      // full reload: fresh Set-Cookie must apply before overview renders (router.push races it)
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/app/overview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Setup failed.");
     } finally {
@@ -167,7 +170,6 @@ export function SetupForm() {
 }
 
 export function InviteAcceptForm({ token }: { token: string }) {
-  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -179,8 +181,9 @@ export function InviteAcceptForm({ token }: { token: string }) {
     setBusy(true);
     try {
       await postAction("accept-invite", { token, fullName, password });
-      router.push("/app/overview");
-      router.refresh();
+      // full reload: fresh Set-Cookie must apply before overview renders (router.push races it)
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/app/overview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not accept invitation.");
     } finally {

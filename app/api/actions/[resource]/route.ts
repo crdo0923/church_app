@@ -167,7 +167,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       return NextResponse.json({ ok: false, error: "Item reference and a 0–100 percent are required." }, { status: 400 });
     const clamped = Math.min(100, Math.max(0, Math.round(pct)));
     await sql`
-      INSERT INTO manual_progress (entity_type, entity_id, percent, updated_by, updated_at)
+      INSERT INTO roadmapchurch.manual_progress (entity_type, entity_id, percent, updated_by, updated_at)
       VALUES (${String(entityType)}, ${entityId}, ${clamped}, ${me.id}, ${nowIso()})
       ON CONFLICT (entity_type, entity_id) DO UPDATE SET percent=EXCLUDED.percent, updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at
     `;
@@ -184,7 +184,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       return NextResponse.json({ ok: false, error: "Task title and phase are required." }, { status: 400 });
     const id = newId();
     await sql`
-      INSERT INTO tasks (id, phase_number, milestone_id, title, summary, description, owner, priority, target_date, dependencies, technical_notes, created_by, created_at, updated_at)
+      INSERT INTO roadmapchurch.tasks (id, phase_number, milestone_id, title, summary, description, owner, priority, target_date, dependencies, technical_notes, created_by, created_at, updated_at)
       VALUES (${id}, ${phaseNumber}, ${milestoneId ?? ""}, ${parsed.data.title}, ${parsed.data.summary}, ${parsed.data.description}, ${parsed.data.owner}, ${parsed.data.priority}, ${parsed.data.targetDate}, ${parsed.data.dependencies}, ${parsed.data.technicalNotes}, ${me.id}, ${nowIso()}, ${nowIso()})
     `;
     await audit({ actorId: me.id, actorEmail: me.email, action: "task.created", entity: "task", entityId: id, metadata: { title: parsed.data.title, phase: phaseNumber } });
@@ -205,7 +205,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
         const now = nowIso();
         const expires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
         await sql`
-          INSERT INTO invites (id, email, full_name, role, notes, token_hash, created_by, created_at, expires_at)
+          INSERT INTO roadmapchurch.invites (id, email, full_name, role, notes, token_hash, created_by, created_at, expires_at)
           VALUES (${id}, ${parsed.data.email.toLowerCase()}, ${parsed.data.fullName}, ${parsed.data.role}, ${parsed.data.notes ?? ""}, ${hashToken(token)}, ${me.id}, ${now}, ${expires})
         `;
         await audit({ actorId: me.id, actorEmail: me.email, action: "user.invited", entity: "user", entityId: id, metadata: { email: parsed.data.email.toLowerCase(), role: parsed.data.role } });
@@ -233,7 +233,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       if (!target) return NextResponse.json({ ok: false, error: "User not found." }, { status: 404 });
       if (target.role === "SUPER_ADMIN") return deny("The Super Admin role cannot be changed here.");
       if (target.id === me.id) return deny("You cannot change your own role.");
-      await sql`UPDATE users SET role=${parsed.data.role}, updated_at=${nowIso()} WHERE id=${target.id}`;
+      await sql`UPDATE roadmapchurch.users SET role=${parsed.data.role}, updated_at=${nowIso()} WHERE id=${target.id}`;
       await audit({ actorId: me.id, actorEmail: me.email, action: "user.role_changed", entity: "user", entityId: target.id, metadata: { from: target.role, to: parsed.data.role } });
       return NextResponse.json({ ok: true });
     }
@@ -247,8 +247,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       if (target.role === "SUPER_ADMIN" && parsed.data.status !== "ACTIVE")
         return deny("The Super Admin account cannot be suspended or disabled here.");
       if (target.id === me.id) return deny("You cannot change your own status.");
-      await sql`UPDATE users SET status=${parsed.data.status}, updated_at=${nowIso()} WHERE id=${target.id}`;
-      await sql`DELETE FROM sessions WHERE user_id=${target.id}`;
+      await sql`UPDATE roadmapchurch.users SET status=${parsed.data.status}, updated_at=${nowIso()} WHERE id=${target.id}`;
+      await sql`DELETE FROM roadmapchurch.sessions WHERE user_id=${target.id}`;
       await audit({ actorId: me.id, actorEmail: me.email, action: "user.status_changed", entity: "user", entityId: target.id, metadata: { from: target.status, to: parsed.data.status, reason: parsed.data.reason } });
       return NextResponse.json({ ok: true });
     }
@@ -259,8 +259,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       const target = users.find((u) => u.id === userId);
       if (!target) return NextResponse.json({ ok: false, error: "User not found." }, { status: 404 });
       const temp = newId().replace(/-/g, "").slice(0, 16);
-      await sql`UPDATE users SET password_hash=${hashPassword(temp)}, must_change_password=1, updated_at=${nowIso()} WHERE id=${target.id}`;
-      await sql`DELETE FROM sessions WHERE user_id=${target.id}`;
+      await sql`UPDATE roadmapchurch.users SET password_hash=${hashPassword(temp)}, must_change_password=1, updated_at=${nowIso()} WHERE id=${target.id}`;
+      await sql`DELETE FROM roadmapchurch.sessions WHERE user_id=${target.id}`;
       await audit({ actorId: me.id, actorEmail: me.email, action: "user.password_reset", entity: "user", entityId: target.id });
       return NextResponse.json({ ok: true, temporaryPassword: temp });
     }

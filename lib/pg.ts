@@ -1,15 +1,18 @@
 /**
  * Shared Postgres pool for the tracker (replaces node:sqlite).
  *
- * - One DATABASE_URL for local dev AND Vercel prod (tunnel/proxy for remote).
+ * - One DATABASE_URL for local dev AND Vercel prod.
  * - `postgres` package is already a dependency — no new packages.
- * - Synchronous-style helpers are gone: all queries are async.
+ * - All queries are async and schema-qualified (roadmapchurch.*) because the
+ *   Neon database is SHARED with other apps (multiply-talents owns public.users
+ *   etc.). Never rely on search_path — every table reference is explicit.
  * - DDL runs on first connect (idempotent CREATE TABLE IF NOT EXISTS).
  */
 
 import postgres from "postgres";
 
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
+export const TRACKER_SCHEMA = "roadmapchurch";
 
 let sql: ReturnType<typeof postgres> | null = null;
 let schemaReady = false;
@@ -28,11 +31,11 @@ export function dbStatus(): {
 }
 
 const DDL = `
-CREATE TABLE IF NOT EXISTS meta (
+CREATE TABLE IF NOT EXISTS roadmapchurch.meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS roadmapchurch.users (
   id TEXT PRIMARY KEY,
   full_name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
@@ -44,7 +47,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS invites (
+CREATE TABLE IF NOT EXISTS roadmapchurch.invites (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL,
   full_name TEXT NOT NULL,
@@ -56,14 +59,14 @@ CREATE TABLE IF NOT EXISTS invites (
   accepted_at TEXT,
   expires_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS sessions (
+CREATE TABLE IF NOT EXISTS roadmapchurch.sessions (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES roadmapchurch.users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS project_state (
+CREATE TABLE IF NOT EXISTS roadmapchurch.project_state (
   id TEXT PRIMARY KEY CHECK (id = 'singleton'),
   project_status TEXT NOT NULL DEFAULT 'PLANNING',
   current_phase_number TEXT NOT NULL DEFAULT '01',
@@ -74,7 +77,7 @@ CREATE TABLE IF NOT EXISTS project_state (
   updated_by TEXT,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS project_updates (
+CREATE TABLE IF NOT EXISTS roadmapchurch.project_updates (
   id TEXT PRIMARY KEY,
   project_status TEXT NOT NULL,
   current_phase_number TEXT NOT NULL,
@@ -88,7 +91,7 @@ CREATE TABLE IF NOT EXISTS project_updates (
   created_by TEXT,
   created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS criteria (
+CREATE TABLE IF NOT EXISTS roadmapchurch.criteria (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL CHECK (entity_type IN ('phase','milestone','task')),
   entity_id TEXT NOT NULL,
@@ -101,7 +104,7 @@ CREATE TABLE IF NOT EXISTS criteria (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS evidence (
+CREATE TABLE IF NOT EXISTS roadmapchurch.evidence (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL CHECK (entity_type IN ('phase','milestone','task')),
   entity_id TEXT NOT NULL,
@@ -112,7 +115,7 @@ CREATE TABLE IF NOT EXISTS evidence (
   created_by TEXT,
   created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS completion_records (
+CREATE TABLE IF NOT EXISTS roadmapchurch.completion_records (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL CHECK (entity_type IN ('phase','milestone','task')),
   entity_id TEXT NOT NULL,
@@ -122,7 +125,7 @@ CREATE TABLE IF NOT EXISTS completion_records (
   actor_id TEXT,
   created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS item_status (
+CREATE TABLE IF NOT EXISTS roadmapchurch.item_status (
   entity_type TEXT NOT NULL CHECK (entity_type IN ('phase','milestone','task')),
   entity_id TEXT NOT NULL,
   status TEXT NOT NULL,
@@ -130,7 +133,7 @@ CREATE TABLE IF NOT EXISTS item_status (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (entity_type, entity_id)
 );
-CREATE TABLE IF NOT EXISTS manual_progress (
+CREATE TABLE IF NOT EXISTS roadmapchurch.manual_progress (
   entity_type TEXT NOT NULL CHECK (entity_type IN ('phase','milestone')),
   entity_id TEXT NOT NULL,
   percent INTEGER NOT NULL,
@@ -138,7 +141,7 @@ CREATE TABLE IF NOT EXISTS manual_progress (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (entity_type, entity_id)
 );
-CREATE TABLE IF NOT EXISTS deliverables (
+CREATE TABLE IF NOT EXISTS roadmapchurch.deliverables (
   id TEXT PRIMARY KEY,
   phase_number TEXT NOT NULL,
   label TEXT NOT NULL,
@@ -149,7 +152,7 @@ CREATE TABLE IF NOT EXISTS deliverables (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS milestones (
+CREATE TABLE IF NOT EXISTS roadmapchurch.milestones (
   id TEXT PRIMARY KEY,
   phase_number TEXT NOT NULL,
   title TEXT NOT NULL,
@@ -160,7 +163,7 @@ CREATE TABLE IF NOT EXISTS milestones (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS tasks (
+CREATE TABLE IF NOT EXISTS roadmapchurch.tasks (
   id TEXT PRIMARY KEY,
   phase_number TEXT NOT NULL,
   milestone_id TEXT NOT NULL DEFAULT '',
@@ -176,7 +179,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS comments (
+CREATE TABLE IF NOT EXISTS roadmapchurch.comments (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,
   entity_id TEXT NOT NULL,
@@ -184,7 +187,7 @@ CREATE TABLE IF NOT EXISTS comments (
   author_id TEXT,
   created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS audit_log (
+CREATE TABLE IF NOT EXISTS roadmapchurch.audit_log (
   id TEXT PRIMARY KEY,
   actor_id TEXT,
   actor_email TEXT NOT NULL DEFAULT '',
@@ -194,11 +197,11 @@ CREATE TABLE IF NOT EXISTS audit_log (
   metadata TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_criteria_entity ON criteria(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_evidence_entity ON evidence(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_comments_entity ON comments(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON roadmapchurch.audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_criteria_entity ON roadmapchurch.criteria(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_entity ON roadmapchurch.evidence(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_comments_entity ON roadmapchurch.comments(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON roadmapchurch.users(email);
 `;
 
 export function getSql() {
@@ -208,9 +211,6 @@ export function getSql() {
       max: 5,
       idle_timeout: 20,
       connect_timeout: 10,
-      // All tracker tables live in the roadmapchurch schema (shared DB).
-      // `postgres` passes unknown options as connection parameters.
-      ...({ search_path: "roadmapchurch, public" } as object),
     });
   }
   return sql;
@@ -224,16 +224,18 @@ export async function ensureSchema(): Promise<boolean> {
   }
   if (schemaReady) return true;
   try {
-    // Dedicated schema isolates tracker tables from other apps sharing the DB.
-    await client.unsafe(`CREATE SCHEMA IF NOT EXISTS roadmapchurch`);
-    await client.unsafe(`SET search_path TO roadmapchurch, public`);
+    // Dedicated schema isolates tracker tables from other apps sharing the DB
+    // (multiply-talents owns public.users/sessions/tasks — never touch those).
+    await client.unsafe(`CREATE SCHEMA IF NOT EXISTS ${TRACKER_SCHEMA}`);
+    // NOTE: no SET search_path — every query below is schema-qualified, so a
+    // pooler that resets session state cannot route us to the wrong tables.
     // Split multi-statement DDL: Neon pooler chokes on multi-command unsafe().
     const statements = DDL.split(/;\s*\n/).map((s) => s.trim()).filter(Boolean);
     for (const stmt of statements) {
       await client.unsafe(stmt);
     }
     await client`
-      INSERT INTO project_state (id, project_status, current_phase_number, overall_progress, progress_source, current_focus, blocker_note, updated_at)
+      INSERT INTO roadmapchurch.project_state (id, project_status, current_phase_number, overall_progress, progress_source, current_focus, blocker_note, updated_at)
       VALUES ('singleton','PLANNING','01',0,'CALCULATED','','',${new Date().toISOString()})
       ON CONFLICT (id) DO NOTHING
     `;
